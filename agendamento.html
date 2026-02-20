@@ -55,6 +55,7 @@
 const APP_CONFIG = {
     url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec",
     nome: "Barbearia do Lucas",
+	telBarbeiro: "5519993847912", // Formato: código do país + DDD + número (sem espaços ou traços)
     horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"],
     
     
@@ -216,6 +217,20 @@ async function saveBooking() {
         mode: 'no-cors', 
         body: JSON.stringify(payload) 
     }).then(() => {
+	const mensagem = encodeURIComponent(
+            `*Novo Agendamento!* ✂️\n\n` +
+            `*Cliente:* ${payload.nome}\n` +
+            `*Serviço:* ${payload.servico}\n` +
+            `*Data:* ${payload.data}\n` +
+            `*Horário:* ${payload.horario}\n` +
+            `*WhatsApp:* wa.me/55${payload.telefone.replace(/\D/g,'')}`
+        );
+        
+        // Pequeno delay para o usuário ver o "✔ Agendado!" antes de abrir o Whats
+        setTimeout(() => {
+            window.open(`https://wa.me/${APP_CONFIG.telBarbeiro}?text=${mensagem}`, '_blank');
+            location.reload();
+        }, 1500);
         console.log("Salvo no Sheets");
     });
 }
