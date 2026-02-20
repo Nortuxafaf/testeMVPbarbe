@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Barbearia</title>
+
+    <!-- Google Font Premium -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            background: radial-gradient(circle at top, #1a1a1a 0%, #000 60%);
+            font-family: 'Inter', sans-serif;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .container {
+            margin: auto;
+            text-align: center;
+            padding: 24px;
+            width: 100%;
+            max-width: 420px;
+            animation: fadeIn 1.2s ease forwards;
+            opacity: 0;
+        }
+
+        .logo-linha {
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+            margin: 0 auto 30px auto;
+        }
+
+        .titulo {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 400;
+            line-height: 1.4;
+            letter-spacing: 1px;
+        }
+
+        .titulo span {
+            display: block;
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #D4AF37, #f5d67b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+            margin-top: 5px;
+        }
+
+        .subtitulo {
+            margin-top: 18px;
+            font-size: 0.95rem;
+            color: #aaa;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .btn-principal {
+            margin-top: 45px;
+            padding: 16px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #D4AF37, #b8962e);
+            color: #000;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
+        }
+
+        .btn-principal:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(212, 175, 55, 0.45);
+        }
+
+        .btn-principal:active {
+            transform: scale(0.98);
+        }
+
+        .footer-text {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #555;
+            letter-spacing: 1px;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+            }
+        }
+
+        @media (max-height: 600px) {
+            .titulo {
+                font-size: 1.7rem;
+            }
+            .titulo span {
+                font-size: 1.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <div class="logo-linha"></div>
+
+        <h1 class="titulo">
+            Bem-vindo à
+            <span id="nomeBarbearia"></span>
+        </h1>
+
+        <p class="subtitulo">
+            Estilo • Precisão • Tradição
+        </p>
+
+        <button id="btnAgendar" class="btn-principal">
+            MARQUE SEU HORÁRIO
+        </button>
+    </main>
+
+    <div class="footer-text" id="footerText"></div>
+
+    <script>
+        /* ======================================
+           CONFIGURAÇÃO DO MVP
+           Basta alterar o nome abaixo
+        ======================================= */
+
+        const CONFIG = {
+            nomeBarbearia: "Barbearia do Lucas"
+        };
+
+        /* ======================================
+           INICIALIZAÇÃO DINÂMICA
+        ======================================= */
+
+        document.getElementById("nomeBarbearia").innerText = CONFIG.nomeBarbearia;
+        document.getElementById("pageTitle").innerText = CONFIG.nomeBarbearia;
+        document.getElementById("footerText").innerText = `© 2026 ${CONFIG.nomeBarbearia}`;
+
+        document.getElementById("btnAgendar").addEventListener("click", () => {
+            
+window.location.href = "agendamento.html";
+
+        });
+    </script>
+
+
+</body>
+</html>

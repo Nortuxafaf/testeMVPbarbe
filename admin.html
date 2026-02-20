@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Barbearia</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --gold: #D4AF37; --gold-light: #f5d67b; --bg-dark: #0d0d0d; --card-bg: rgba(20, 20, 20, 0.7); --red: #ff4444; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at 20% 0%, #1c1c1c 0%, var(--bg-dark) 40%, #000 100%); color: #fff; min-height: 100vh; padding: 20px; }
+        .container { max-width: 420px; margin: auto; }
+        .titulo { text-align: center; font-family: 'Playfair Display', serif; margin-bottom: 25px; }
+        .titulo span { display: block; font-size: 1.8rem; background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; }
+        .card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid rgba(212, 175, 55, 0.15); border-radius: 22px; padding: 22px; margin-bottom: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
+        .card h2 { font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--gold); margin-bottom: 15px; }
+        .mes-header { text-align: center; font-weight: 600; text-transform: capitalize; margin-bottom: 15px; }
+        .dias-semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; font-size: 0.7rem; color: #666; margin-bottom: 10px; }
+        .grid-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .dia { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 0.85rem; cursor: pointer; border: 1px solid transparent; transition: 0.2s; }
+        .dia:hover { background: rgba(212, 175, 55, 0.1); }
+        .dia.selecionado { background: var(--gold); color: #000; font-weight: 700; }
+        .dia.bloqueado { background: rgba(255, 68, 68, 0.2); color: var(--red); border-color: rgba(255, 68, 68, 0.3); }
+        .dia.tem-agendamento { border-color: var(--gold); box-shadow: inset 0 0 8px rgba(212, 175, 55, 0.3); }
+        .horario-item { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .horario-info strong { color: var(--gold); display: block; }
+        .horario-info small { color: #888; font-size: 0.75rem; }
+        .horario-info strong.bloqueado-txt { color: var(--red); }
+        .btn-group { display: flex; gap: 12px; }
+        .btn-acao { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 5px; transition: 0.2s; }
+        #statusSync { font-size: 0.7rem; text-align: center; margin-bottom: 10px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="titulo">
+        <h1>Painel <span>Administrativo</span></h1>
+        <div id="statusSync">Sincronizando...</div>
+    </header>
+    <section class="card">
+        <div class="mes-header" id="mesAnoDisplay"></div>
+        <div class="dias-semana" id="semanaHeader">
+            <div data-idx="0">DOM</div><div data-idx="1">SEG</div><div data-idx="2">TER</div>
+            <div data-idx="3">QUA</div><div data-idx="4">QUI</div><div data-idx="5">SEX</div><div data-idx="6">SÁB</div>
+        </div>
+        <div class="grid-dias" id="calendarGrid"></div>
+    </section>
+    <section class="card">
+        <h2 id="agendaTitulo">Agenda do Dia</h2>
+        <div id="horariosLista"></div>
+    </section>
+</div>
+
+<script>
+const APP_CONFIG = {
+    url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec", // Insira a URL do seu Google Apps Script aqui
+    horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"] //
+};
+
+let state = {
+    viewDate: new Date(),
+    selectedDate: null,
+    appointments: [],
+    blocks: { dates: [], weekDays: [], slots: {} } //
+};
+
+async function syncData() {
+    const statusEl = document.getElementById("statusSync");
+    try {
+        const response = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`); //
+        const data = await response.json(); //
+        
+        state.appointments = data.agendamentos.map(item => ({
+            ...item,
+            data: String(item.data).trim(),
+            horario: String(item.horario).trim().match(/(\d{2}:\d{2})/)?.[0] || item.horario
+        }));
+
+        state.blocks = { dates: [], weekDays: [], slots: {} }; // Reinicia blocos
+        data.bloqueios.forEach(b => {
+            if (b.tipo === 'date') state.blocks.dates.push(b.valor);
+            if (b.tipo === 'week') state.blocks.weekDays.push(parseInt(b.valor));
+            if (b.tipo === 'slot') {
+                if (!state.blocks.slots[b.data]) state.blocks.slots[b.data] = [];
+                state.blocks.slots[b.data].push(b.valor);
+            }
+        });
+
+        statusEl.innerText = "● Sincronizado (" + state.appointments.length + ")";
+        statusEl.style.color = "#4CAF50";
+    } catch (e) {
+        statusEl.innerText = "○ Erro de Conexão";
+        statusEl.style.color = "#ff4444";
+    }
+    renderCalendar();
+    if(state.selectedDate) renderSlots();
+}
+
+async function sendAction(payload) {
+    // --- ATUALIZAÇÃO OTIMISTA (Muda o visual instantaneamente) ---
+    if (payload.action === 'block' || payload.action === 'unblock') {
+        const isAdding = payload.action === 'block';
+        if (payload.tipo === 'date') {
+            state.blocks.dates = isAdding 
+                ? [...state.blocks.dates, payload.valor] 
+                : state.blocks.dates.filter(d => d !== payload.valor);
+        } 
+        else if (payload.tipo === 'week') {
+            state.blocks.weekDays = isAdding 
+                ? [...state.blocks.weekDays, parseInt(payload.valor)] 
+                : state.blocks.weekDays.filter(d => d !== parseInt(payload.valor));
+        }
+        else if (payload.tipo === 'slot') {
+            if (!state.blocks.slots[payload.data]) state.blocks.slots[payload.data] = [];
+            state.blocks.slots[payload.data] = isAdding 
+                ? [...state.blocks.slots[payload.data], payload.valor] 
+                : state.blocks.slots[payload.data].filter(h => h !== payload.valor);
+        }
+    }
+
+    if (payload.action === 'delete') {
+        state.appointments = state.appointments.filter(a => 
+            !(a.nome === payload.nome && a.data === payload.data && a.horario === payload.horario)
+        );
+    }
+
+    // Renderiza a mudança NA HORA
+    renderCalendar();
+    if(state.selectedDate) renderSlots();
+
+    // --- EXECUÇÃO EM BACKGROUND ---
+    try {
+        await fetch(APP_CONFIG.url, { 
+            method: 'POST', 
+            mode: 'no-cors', // Otimiza a velocidade de envio
+            body: JSON.stringify(payload) 
+        });
+        // Sincroniza silenciosamente em 2 segundos para garantir que o banco bate com a tela
+        setTimeout(syncData, 2000); 
+    } catch (e) {
+        alert("Erro ao salvar. Verifique sua conexão.");
+        syncData(); // Reverte para o estado real do banco em caso de erro
+    }
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const label = document.getElementById('mesAnoDisplay');
+    const year = state.viewDate.getFullYear();
+    const month = state.viewDate.getMonth();
+    
+    grid.innerHTML = '';
+    label.innerText = state.viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    document.querySelectorAll('#semanaHeader div').forEach(div => {
+        const idx = parseInt(div.dataset.idx);
+        div.style.color = state.blocks.weekDays.includes(idx) ? "var(--red)" : "#666";
+        div.onclick = () => sendAction({ action: state.blocks.weekDays.includes(idx) ? 'unblock' : 'block', tipo: 'week', valor: idx, data: 'all' });
+    });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(year, month, d);
+        const dStr = date.toLocaleDateString('pt-BR');
+        const dIso = date.toISOString().split('T')[0];
+        const el = document.createElement('div');
+        
+        el.className = 'dia';
+        el.innerText = d;
+        if (state.blocks.dates.includes(dIso) || state.blocks.weekDays.includes(date.getDay())) el.classList.add('bloqueado');
+        if (state.appointments.some(a => a.data === dStr)) el.classList.add('tem-agendamento');
+        if (state.selectedDate?.toLocaleDateString('pt-BR') === dStr) el.classList.add('selecionado');
+
+        el.onclick = () => { state.selectedDate = date; renderCalendar(); renderSlots(); };
+        el.ondblclick = () => sendAction({ action: state.blocks.dates.includes(dIso) ? 'unblock' : 'block', tipo: 'date', valor: dIso, data: 'all' });
+        grid.appendChild(el);
+    }
+}
+
+function renderSlots() {
+    const list = document.getElementById('horariosLista');
+    const dStr = state.selectedDate.toLocaleDateString('pt-BR');
+    list.innerHTML = '';
+
+    APP_CONFIG.horarios.forEach(h => {
+        const apt = state.appointments.find(a => a.data === dStr && a.horario.includes(h));
+        const isBlocked = state.blocks.slots[dStr]?.includes(h);
+        const item = document.createElement('div');
+        item.className = 'horario-item';
+        
+        if (apt) {
+            item.innerHTML = `
+                <div class="horario-info"><strong>${h} - ${apt.nome}</strong><small>${apt.servico}</small></div>
+                <div class="btn-group">
+                    <button class="btn-acao" onclick="window.open('https://wa.me/55${apt.telefone.replace(/\D/g,'')}')">💬</button>
+                    <button class="btn-acao" onclick="deleteApt('${apt.nome}', '${apt.data}', '${apt.horario}')">❌</button>
+                </div>`;
+        } else {
+            item.innerHTML = `
+                <div class="horario-info"><strong class="${isBlocked ? 'bloqueado-txt' : ''}">${h}</strong><small>${isBlocked ? 'BLOQUEADO' : 'Livre'}</small></div>
+                <button class="btn-acao" onclick="sendAction({ action: '${isBlocked ? 'unblock' : 'block'}', tipo: 'slot', valor: '${h}', data: '${dStr}' })">${isBlocked ? '🔓' : '🔒'}</button>`;
+        }
+        list.appendChild(item);
+    });
+}
+
+function deleteApt(nome, data, horario) {
+    if (confirm(`Excluir agendamento de ${nome}?`)) sendAction({ action: 'delete', nome, data, horario }); //
+}
+
+syncData();
+</script>
+</body>
+</html>

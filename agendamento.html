@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendar Horário - Barbearia</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --gold: #D4AF37; --gold-light: #f5d67b; --bg-dark: #0d0d0d; --card-bg: rgba(20, 20, 20, 0.7); --red: #ff4444; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background: radial-gradient(circle at 20% 0%, #1c1c1c 0%, var(--bg-dark) 40%, #000 100%); font-family: 'Inter', sans-serif; color:#fff; min-height:100vh; padding:20px; }
+        .container { max-width:420px; margin:auto; }
+        .titulo { text-align:center; font-family:'Playfair Display', serif; margin-bottom:30px; }
+        .titulo span { display:block; font-size:2rem; background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; font-weight:700; }
+        .calendario-card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid rgba(212,175,55,0.15); border-radius:22px; padding:22px; position: relative; }
+        .mes-header { text-align:center; margin-bottom:18px; font-weight:600; text-transform:capitalize; }
+        .dias-semana { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:0.7rem; color:#888; margin-bottom:10px; }
+        .grid-dias { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+        .dia { aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; border-radius:14px; font-size:0.9rem; transition: 0.3s; }
+        .dia.disponivel { cursor:pointer; }
+        .dia.disponivel:hover { background:rgba(212,175,55,0.2); }
+        .dia.passado { color:#333; cursor:not-allowed; opacity: 0.4; }
+        .dia.bloqueado { background: rgba(255, 68, 68, 0.1); color: #ff4444; cursor: not-allowed; }
+        .dia.selecionado { background: var(--gold); color:#000; font-weight:700; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; padding:20px; z-index: 1000; backdrop-filter: blur(5px); }
+        
+        /* Estilo do Popup e Botão Fechar */
+        .popup { background:#111; width:100%; max-width:380px; border-radius:20px; padding:24px; border: 1px solid rgba(212,175,55,0.3); position: relative; }
+        .btn-close { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.05); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: 0.2s; }
+        .btn-close:hover { background: var(--red); transform: scale(1.1); }
+
+        .horarios-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; margin-top: 10px; }
+        .horario-btn { padding:10px; border-radius:12px; border:1px solid rgba(212,175,55,0.3); background:transparent; color: var(--gold); cursor:pointer; }
+        .horario-btn.ativo { background: var(--gold); color:#000; }
+        .horario-btn.ocupado { background: #1a1a1a; color: #444; cursor: not-allowed; text-decoration: line-through; }
+        .form-group { margin-bottom:15px; }
+        .form-group input, .form-group select { width:100%; padding:14px; border-radius:12px; border:1px solid #333; background:#1a1a1a; color:#fff; }
+        .btn-confirmar { width:100%; padding:16px; border:none; border-radius:14px; background: var(--gold); color:#000; font-weight:700; cursor:pointer; text-transform: uppercase; }
+        #statusSync { position: absolute; top: -25px; right: 10px; font-size: 0.7rem; }
+    </style>
+</head>
+<body>
+<main class="container">
+    <header class="titulo"><h1 id="nomeBarbearia">Carregando...</h1><span>Agendamento</span></header>
+    <div class="calendario-card">
+        <div id="statusSync">Sincronizando...</div>
+        <div class="mes-header" id="mesAnoDisplay"></div>
+        <div class="dias-semana"><div>DOM</div><div>SEG</div><div>TER</div><div>QUA</div><div>QUI</div><div>SEX</div><div>SÁB</div></div>
+        <div class="grid-dias" id="calendarGrid"></div>
+    </div>
+</main>
+<div class="overlay" id="mainOverlay" onclick="if(event.target === this) closeOverlay()"></div>
+
+<script>
+const APP_CONFIG = {
+    url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec",
+    nome: "Barbearia do Lucas",
+    horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"],
+    servicos: [{nome:"Corte", valor:40}, {nome:"Barba", valor:30}, {nome:"Combo", valor:60}]
+};
+
+let state = {
+    viewDate: new Date(),
+    today: new Date(new Date().setHours(0,0,0,0)),
+    selectedDate: null,
+    selectedSlot: null,
+    selectedService: null,
+    appointments: [],
+    blocks: { dates: [], weekDays: [], slots: {} }
+};
+
+document.getElementById("nomeBarbearia").innerText = APP_CONFIG.nome;
+
+async function syncData() {
+    try {
+        const res = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`);
+        const data = await res.json();
+        state.appointments = data.agendamentos;
+        
+        state.blocks = { dates: [], weekDays: [], slots: {} };
+        data.bloqueios.forEach(b => {
+            if (b.tipo === 'date') state.blocks.dates.push(b.valor);
+            if (b.tipo === 'week') state.blocks.weekDays.push(parseInt(b.valor));
+            if (b.tipo === 'slot') {
+                if (!state.blocks.slots[b.data]) state.blocks.slots[b.data] = [];
+                state.blocks.slots[b.data].push(b.valor);
+            }
+        });
+        document.getElementById("statusSync").innerText = "● Agenda Aberta";
+        document.getElementById("statusSync").style.color = "#4CAF50";
+    } catch (e) { document.getElementById("statusSync").innerText = "○ Offline"; }
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const label = document.getElementById('mesAnoDisplay');
+    const year = state.viewDate.getFullYear();
+    const month = state.viewDate.getMonth();
+    
+    grid.innerHTML = '';
+    label.innerText = state.viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(year, month, d);
+        const dIso = date.toISOString().split('T')[0];
+        const el = document.createElement('div');
+        el.className = 'dia';
+        el.innerText = d;
+
+        const isPast = date < state.today;
+        const isBlocked = state.blocks.dates.includes(dIso) || state.blocks.weekDays.includes(date.getDay());
+
+        if (isPast) el.classList.add('passado');
+        else if (isBlocked) el.classList.add('bloqueado');
+        else {
+            el.classList.add('disponivel');
+            el.onclick = () => selectDate(date);
+        }
+        grid.appendChild(el);
+    }
+}
+
+function selectDate(date) {
+    state.selectedDate = date;
+    const overlay = document.getElementById("mainOverlay");
+    overlay.style.display = "flex";
+    overlay.innerHTML = `
+        <div class="popup">
+            <button class="btn-close" onclick="closeOverlay()">✕</button>
+            <h3>Horários para ${date.toLocaleDateString('pt-BR')}</h3>
+            <div class="horarios-grid" id="slotsGrid"></div>
+            <button class="btn-confirmar" onclick="stepTwo()">Próximo</button>
+        </div>
+    `;
+
+    const grid = document.getElementById("slotsGrid");
+    const dStr = date.toLocaleDateString('pt-BR');
+    APP_CONFIG.horarios.forEach(h => {
+        const isTaken = state.appointments.some(a => a.data === dStr && a.horario.includes(h));
+        const isAdminBlocked = state.blocks.slots[dStr]?.includes(h);
+        const btn = document.createElement("button");
+        btn.innerText = h;
+        btn.className = (isTaken || isAdminBlocked) ? "horario-btn ocupado" : "horario-btn";
+        if (!isTaken && !isAdminBlocked) {
+            btn.onclick = () => { 
+                state.selectedSlot = h; 
+                document.querySelectorAll(".horario-btn").forEach(b => b.classList.remove("ativo")); 
+                btn.classList.add("ativo"); 
+            };
+        }
+        grid.appendChild(btn);
+    });
+}
+
+function stepTwo() {
+    if (!state.selectedSlot) return alert("Escolha um horário");
+    const overlay = document.getElementById("mainOverlay");
+    overlay.innerHTML = `
+        <div class="popup">
+            <button class="btn-close" onclick="closeOverlay()">✕</button>
+            <h3>Seus Dados</h3>
+            <div class="form-group">
+                <select id="fieldService" onchange="state.selectedService=APP_CONFIG.servicos[this.value]">
+                    <option value="">Serviço</option>
+                    ${APP_CONFIG.servicos.map((s,i)=>`<option value="${i}">${s.nome} - R$${s.valor}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><input type="text" id="fieldName" placeholder="Nome"></div>
+            <div class="form-group"><input type="tel" id="fieldPhone" placeholder="WhatsApp"></div>
+            <button class="btn-confirmar" onclick="saveBooking()">Finalizar</button>
+        </div>
+    `;
+}
+
+function closeOverlay() {
+    document.getElementById("mainOverlay").style.display = "none";
+    state.selectedSlot = null;
+    state.selectedService = null;
+}
+
+async function saveBooking() {
+    const nome = document.getElementById("fieldName").value;
+    const fone = document.getElementById("fieldPhone").value;
+    
+    if(!nome || !fone || !state.selectedService) return alert("Preencha tudo!");
+
+    const payload = { 
+        action: 'add', 
+        nome, 
+        telefone: fone, 
+        servico: state.selectedService.nome, 
+        valor: state.selectedService.valor, 
+        data: state.selectedDate.toLocaleDateString('pt-BR'), 
+        horario: state.selectedSlot 
+    };
+
+    const overlay = document.getElementById("mainOverlay");
+    overlay.innerHTML = `
+        <div class="popup" style="text-align:center">
+            <h2 style="color:var(--gold)">✔ Agendado!</h2>
+            <p style="margin:15px 0">Estamos processando seu pedido...</p>
+            <button class="btn-confirmar" onclick="location.reload()">OK</button>
+        </div>
+    `;
+
+    fetch(APP_CONFIG.url, { 
+        method: 'POST', 
+        mode: 'no-cors', 
+        body: JSON.stringify(payload) 
+    }).then(() => {
+        console.log("Salvo no Sheets");
+    });
+}
+
+syncData();
+</script>
+</body>
+</html>
