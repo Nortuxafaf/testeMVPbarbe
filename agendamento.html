@@ -56,7 +56,8 @@ const APP_CONFIG = {
     url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec",
     nome: "Barbearia do Lucas",
     horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"],
-    servicos: [{nome:"Corte", valor:40}, {nome:"Barba", valor:30}, {nome:"Combo", valor:60}]
+    
+    
 };
 
 let state = {
@@ -76,6 +77,7 @@ async function syncData() {
         const res = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`);
         const data = await res.json();
         state.appointments = data.agendamentos;
+		APP_CONFIG.servicos = data.servicos;
         
         state.blocks = { dates: [], weekDays: [], slots: {} };
         data.bloqueios.forEach(b => {

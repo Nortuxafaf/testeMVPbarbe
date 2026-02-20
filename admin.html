@@ -29,6 +29,16 @@
         .btn-group { display: flex; gap: 12px; }
         .btn-acao { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 5px; transition: 0.2s; }
         #statusSync { font-size: 0.7rem; text-align: center; margin-bottom: 10px; opacity: 0.8; }
+
+        /* --- NOVOS ESTILOS: BOTÃO CONFIG E POPUP --- */
+        .btn-settings { position: fixed; bottom: 20px; right: 20px; background: var(--card-bg); border: 1px solid var(--gold); color: var(--gold); width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; cursor: pointer; z-index: 100; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .overlay-admin { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; backdrop-filter: blur(5px); }
+        .popup-admin { background: #111; width: 100%; max-width: 380px; border-radius: 22px; padding: 25px; border: 1px solid var(--gold); }
+        .svc-scroll { max-height: 300px; overflow-y: auto; margin: 15px 0; padding-right: 5px; }
+        .servico-edit-item { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+        .servico-edit-item input { background: #1a1a1a; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 10px; flex: 1; font-size: 0.9rem; }
+        .btn-save-services { width: 100%; padding: 14px; background: var(--gold); border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-top: 10px; color: #000; }
+        .btn-add-line { background: none; border: 1px dashed var(--gold); color: var(--gold); width: 100%; padding: 10px; margin-top: 5px; border-radius: 10px; cursor: pointer; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -40,8 +50,8 @@
     <section class="card">
         <div class="mes-header" id="mesAnoDisplay"></div>
         <div class="dias-semana" id="semanaHeader">
-            <div data-idx="0">DOM</div><div data-idx="1">SEG</div><div data-idx="2">TER</div>
-            <div data-idx="3">QUA</div><div data-idx="4">QUI</div><div data-idx="5">SEX</div><div data-idx="6">SÁB</div>
+            <div data-idx="0" style="cursor:pointer">DOM</div><div data-idx="1" style="cursor:pointer">SEG</div><div data-idx="2" style="cursor:pointer">TER</div>
+            <div data-idx="3" style="cursor:pointer">QUA</div><div data-idx="4" style="cursor:pointer">QUI</div><div data-idx="5" style="cursor:pointer">SEX</div><div data-idx="6" style="cursor:pointer">SÁB</div>
         </div>
         <div class="grid-dias" id="calendarGrid"></div>
     </section>
@@ -51,24 +61,37 @@
     </section>
 </div>
 
+<button class="btn-settings" onclick="openServiceManager()" title="Gerenciar Serviços">⚙️</button>
+
+<div class="overlay-admin" id="serviceOverlay">
+    <div class="popup-admin">
+        <h2 style="color:var(--gold); font-family:'Playfair Display', serif;">Serviços</h2>
+        <div class="svc-scroll" id="listaServicosEditor"></div>
+        <button class="btn-add-line" onclick="addServiceLine()">+ Adicionar Novo</button>
+        <button class="btn-save-services" onclick="saveServices()">SALVAR</button>
+        <button class="btn-add-line" style="border:none; color:#888; margin-top:10px;" onclick="closeServiceManager()">Cancelar</button>
+    </div>
+</div>
+
 <script>
 const APP_CONFIG = {
-    url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec", // Insira a URL do seu Google Apps Script aqui
-    horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"] //
+    url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec",
+    horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"]
 };
 
 let state = {
     viewDate: new Date(),
     selectedDate: null,
     appointments: [],
-    blocks: { dates: [], weekDays: [], slots: {} } //
+    blocks: { dates: [], weekDays: [], slots: {} },
+    services: []
 };
 
 async function syncData() {
     const statusEl = document.getElementById("statusSync");
     try {
-        const response = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`); //
-        const data = await response.json(); //
+        const response = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`);
+        const data = await response.json();
         
         state.appointments = data.agendamentos.map(item => ({
             ...item,
@@ -76,7 +99,8 @@ async function syncData() {
             horario: String(item.horario).trim().match(/(\d{2}:\d{2})/)?.[0] || item.horario
         }));
 
-        state.blocks = { dates: [], weekDays: [], slots: {} }; // Reinicia blocos
+        state.services = data.servicos || [];
+        state.blocks = { dates: [], weekDays: [], slots: {} };
         data.bloqueios.forEach(b => {
             if (b.tipo === 'date') state.blocks.dates.push(b.valor);
             if (b.tipo === 'week') state.blocks.weekDays.push(parseInt(b.valor));
@@ -97,50 +121,81 @@ async function syncData() {
 }
 
 async function sendAction(payload) {
-    // --- ATUALIZAÇÃO OTIMISTA (Muda o visual instantaneamente) ---
+    // Atualização otimista
     if (payload.action === 'block' || payload.action === 'unblock') {
         const isAdding = payload.action === 'block';
         if (payload.tipo === 'date') {
-            state.blocks.dates = isAdding 
-                ? [...state.blocks.dates, payload.valor] 
-                : state.blocks.dates.filter(d => d !== payload.valor);
-        } 
-        else if (payload.tipo === 'week') {
-            state.blocks.weekDays = isAdding 
-                ? [...state.blocks.weekDays, parseInt(payload.valor)] 
-                : state.blocks.weekDays.filter(d => d !== parseInt(payload.valor));
-        }
-        else if (payload.tipo === 'slot') {
+            state.blocks.dates = isAdding ? [...state.blocks.dates, payload.valor] : state.blocks.dates.filter(d => d !== payload.valor);
+        } else if (payload.tipo === 'week') {
+            state.blocks.weekDays = isAdding ? [...state.blocks.weekDays, parseInt(payload.valor)] : state.blocks.weekDays.filter(d => d !== parseInt(payload.valor));
+        } else if (payload.tipo === 'slot') {
             if (!state.blocks.slots[payload.data]) state.blocks.slots[payload.data] = [];
-            state.blocks.slots[payload.data] = isAdding 
-                ? [...state.blocks.slots[payload.data], payload.valor] 
-                : state.blocks.slots[payload.data].filter(h => h !== payload.valor);
+            state.blocks.slots[payload.data] = isAdding ? [...state.blocks.slots[payload.data], payload.valor] : state.blocks.slots[payload.data].filter(h => h !== payload.valor);
         }
     }
 
     if (payload.action === 'delete') {
-        state.appointments = state.appointments.filter(a => 
-            !(a.nome === payload.nome && a.data === payload.data && a.horario === payload.horario)
-        );
+        state.appointments = state.appointments.filter(a => !(a.nome === payload.nome && a.data === payload.data && a.horario === payload.horario));
     }
 
-    // Renderiza a mudança NA HORA
     renderCalendar();
     if(state.selectedDate) renderSlots();
 
-    // --- EXECUÇÃO EM BACKGROUND ---
     try {
-        await fetch(APP_CONFIG.url, { 
-            method: 'POST', 
-            mode: 'no-cors', // Otimiza a velocidade de envio
-            body: JSON.stringify(payload) 
-        });
-        // Sincroniza silenciosamente em 2 segundos para garantir que o banco bate com a tela
+        await fetch(APP_CONFIG.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
         setTimeout(syncData, 2000); 
     } catch (e) {
-        alert("Erro ao salvar. Verifique sua conexão.");
-        syncData(); // Reverte para o estado real do banco em caso de erro
+        alert("Erro ao salvar.");
+        syncData();
     }
+}
+
+// --- FUNÇÕES DE GERENCIAMENTO DE SERVIÇOS ---
+function openServiceManager() {
+    const container = document.getElementById('listaServicosEditor');
+    container.innerHTML = '';
+    state.services.forEach(s => addServiceLine(s.nome, s.valor));
+    if(state.services.length === 0) addServiceLine();
+    document.getElementById('serviceOverlay').style.display = 'flex';
+}
+
+function closeServiceManager() {
+    document.getElementById('serviceOverlay').style.display = 'none';
+}
+
+function addServiceLine(nome = '', valor = '') {
+    const container = document.getElementById('listaServicosEditor');
+    const div = document.createElement('div');
+    div.className = 'servico-edit-item';
+    div.innerHTML = `
+        <input type="text" placeholder="Ex: Corte" value="${nome}" class="svc-nome">
+        <input type="number" placeholder="R$" value="${valor}" class="svc-valor" style="max-width:80px">
+        <button onclick="this.parentElement.remove()" style="background:none; border:none; color:var(--red); font-size:1.2rem; cursor:pointer; padding:0 5px;">✕</button>
+    `;
+    container.appendChild(div);
+}
+
+async function saveServices() {
+    const nomes = document.querySelectorAll('.svc-nome');
+    const valores = document.querySelectorAll('.svc-valor');
+    const lista = [];
+
+    nomes.forEach((input, i) => {
+        if(input.value.trim()) {
+            lista.push({ nome: input.value.trim(), valor: valores[i].value || "0" });
+        }
+    });
+
+    if(!confirm("Deseja atualizar a lista de serviços?")) return;
+
+    document.getElementById("statusSync").innerText = "Salvando serviços...";
+    
+    await sendAction({
+        action: 'updateServices',
+        lista: lista
+    });
+
+    closeServiceManager();
 }
 
 function renderCalendar() {
@@ -194,7 +249,7 @@ function renderSlots() {
         
         if (apt) {
             item.innerHTML = `
-                <div class="horario-info"><strong>${h} - ${apt.nome}</strong><small>${apt.servico}</small></div>
+                <div class="horario-info"><strong>${h} - ${apt.nome}</strong><small>${apt.servico} (R$${apt.valor})</small></div>
                 <div class="btn-group">
                     <button class="btn-acao" onclick="window.open('https://wa.me/55${apt.telefone.replace(/\D/g,'')}')">💬</button>
                     <button class="btn-acao" onclick="deleteApt('${apt.nome}', '${apt.data}', '${apt.horario}')">❌</button>
@@ -209,7 +264,7 @@ function renderSlots() {
 }
 
 function deleteApt(nome, data, horario) {
-    if (confirm(`Excluir agendamento de ${nome}?`)) sendAction({ action: 'delete', nome, data, horario }); //
+    if (confirm(`Excluir agendamento de ${nome}?`)) sendAction({ action: 'delete', nome, data, horario });
 }
 
 syncData();
