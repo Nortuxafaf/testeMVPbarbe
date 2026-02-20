@@ -23,12 +23,8 @@
         .dia.bloqueado { background: rgba(255, 68, 68, 0.1); color: #ff4444; cursor: not-allowed; }
         .dia.selecionado { background: var(--gold); color:#000; font-weight:700; }
         .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; padding:20px; z-index: 1000; backdrop-filter: blur(5px); }
-        
-        /* Estilo do Popup e Botão Fechar */
         .popup { background:#111; width:100%; max-width:380px; border-radius:20px; padding:24px; border: 1px solid rgba(212,175,55,0.3); position: relative; }
         .btn-close { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.05); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: 0.2s; }
-        .btn-close:hover { background: var(--red); transform: scale(1.1); }
-
         .horarios-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; margin-top: 10px; }
         .horario-btn { padding:10px; border-radius:12px; border:1px solid rgba(212,175,55,0.3); background:transparent; color: var(--gold); cursor:pointer; }
         .horario-btn.ativo { background: var(--gold); color:#000; }
@@ -44,7 +40,11 @@
     <header class="titulo"><h1 id="nomeBarbearia">Carregando...</h1><span>Agendamento</span></header>
     <div class="calendario-card">
         <div id="statusSync">Sincronizando...</div>
-        <div class="mes-header" id="mesAnoDisplay"></div>
+        <div class="mes-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <button id="prevMonth" onclick="changeMonth(-1)" style="background:none; border:none; color:var(--gold); cursor:pointer; padding:10px; visibility:hidden;">❮</button>
+            <span id="mesAnoDisplay"></span>
+            <button id="nextMonth" onclick="changeMonth(1)" style="background:none; border:none; color:var(--gold); cursor:pointer; padding:10px;">❯</button>
+        </div>
         <div class="dias-semana"><div>DOM</div><div>SEG</div><div>TER</div><div>QUA</div><div>QUI</div><div>SEX</div><div>SÁB</div></div>
         <div class="grid-dias" id="calendarGrid"></div>
     </div>
@@ -55,10 +55,9 @@
 const APP_CONFIG = {
     url: "https://script.google.com/macros/s/AKfycbwmAL7r3lr9uuXqTc490eZ7H5UponSSJ8CEubhAIAKFwP1cJCVq-dVQ021CNRsUz6CO/exec",
     nome: "Barbearia do Lucas",
-	telBarbeiro: "5519993847912", // Formato: código do país + DDD + número (sem espaços ou traços)
+    telBarbeiro: "5519993847912",
     horarios: ["09:00","10:00","11:00","13:00","14:00","15:00","16:00","17:00"],
-    
-    
+    servicos: []
 };
 
 let state = {
@@ -73,12 +72,28 @@ let state = {
 
 document.getElementById("nomeBarbearia").innerText = APP_CONFIG.nome;
 
+// FUNÇÃO GLOBAL DE MUDANÇA DE MÊS
+function changeMonth(diff) {
+    const newDate = new Date(state.viewDate.getFullYear(), state.viewDate.getMonth() + diff, 1);
+    const startOfCurrentMonth = new Date(state.today.getFullYear(), state.today.getMonth(), 1);
+    const startOfNextMonth = new Date(state.today.getFullYear(), state.today.getMonth() + 1, 1);
+
+    if (newDate < startOfCurrentMonth || newDate > startOfNextMonth) return;
+
+    state.viewDate = newDate;
+    
+    document.getElementById("prevMonth").style.visibility = newDate > startOfCurrentMonth ? "visible" : "hidden";
+    document.getElementById("nextMonth").style.visibility = newDate < startOfNextMonth ? "visible" : "hidden";
+    
+    renderCalendar();
+}
+
 async function syncData() {
     try {
         const res = await fetch(`${APP_CONFIG.url}?t=${Date.now()}`);
         const data = await res.json();
         state.appointments = data.agendamentos;
-		APP_CONFIG.servicos = data.servicos;
+        APP_CONFIG.servicos = data.servicos;
         
         state.blocks = { dates: [], weekDays: [], slots: {} };
         data.bloqueios.forEach(b => {
@@ -111,7 +126,7 @@ function renderCalendar() {
 
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month, d);
-        const dIso = date.toISOString().split('T')[0];
+        const dIso = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
         const el = document.createElement('div');
         el.className = 'dia';
         el.innerText = d;
@@ -190,44 +205,32 @@ function closeOverlay() {
 async function saveBooking() {
     const nome = document.getElementById("fieldName").value;
     const fone = document.getElementById("fieldPhone").value;
-    
     if(!nome || !fone || !state.selectedService) return alert("Preencha tudo!");
 
     const payload = { 
-        action: 'add', 
-        nome, 
-        telefone: fone, 
-        servico: state.selectedService.nome, 
-        valor: state.selectedService.valor, 
-        data: state.selectedDate.toLocaleDateString('pt-BR'), 
-        horario: state.selectedSlot 
+        action: 'add', nome, telefone: fone, 
+        servico: state.selectedService.nome, valor: state.selectedService.valor, 
+        data: state.selectedDate.toLocaleDateString('pt-BR'), horario: state.selectedSlot 
     };
-	const mensagem = encodeURIComponent(
+
+    const mensagem = encodeURIComponent(
         `*Novo Agendamento!* ✂️\n\n` +
         `*Cliente:* ${payload.nome}\n` +
         `*Serviço:* ${payload.servico}\n` +
         `*Data:* ${payload.data}\n` +
-        `*Horário:* ${payload.horario}\n` +
-        `*WhatsApp:* wa.me/55${payload.telefone.replace(/\D/g,'')}`
+        `*Horário:* ${payload.horario}`
     );
-	const linkWhats = `https://wa.me/${APP_CONFIG.telBarbeiro}?text=${mensagem}`;
-    const overlay = document.getElementById("mainOverlay");
-    overlay.innerHTML = `
+    const linkWhats = `https://wa.me/${APP_CONFIG.telBarbeiro}?text=${mensagem}`;
+    
+    document.getElementById("mainOverlay").innerHTML = `
         <div class="popup" style="text-align:center">
-            <h2 style="color:var(--gold)">✔ Agendado!</h2>
-            <p style="margin:15px 0">Estamos processando seu pedido...</p>
-            <button class="btn-confirmar" onclick="window.open('${linkWhats}', '_blank'); location.reload();">OK</button>
+            <h2 style="color:var(--gold)">✔ Quase lá!</h2>
+            <p style="margin:15px 0">Clique no botão para confirmar via WhatsApp.</p>
+            <button class="btn-confirmar" onclick="window.open('${linkWhats}', '_blank'); location.reload();">Confirmar WhatsApp</button>
         </div>
     `;
 
-    fetch(APP_CONFIG.url, { 
-        method: 'POST', 
-        mode: 'no-cors', 
-        body: JSON.stringify(payload) 
-    }).then(() => {
-
-        console.log("Salvo no Sheets");
-    });
+    fetch(APP_CONFIG.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
 }
 
 syncData();
