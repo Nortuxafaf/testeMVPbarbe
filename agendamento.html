@@ -202,13 +202,21 @@ async function saveBooking() {
         data: state.selectedDate.toLocaleDateString('pt-BR'), 
         horario: state.selectedSlot 
     };
-
+	const mensagem = encodeURIComponent(
+        `*Novo Agendamento!* ✂️\n\n` +
+        `*Cliente:* ${payload.nome}\n` +
+        `*Serviço:* ${payload.servico}\n` +
+        `*Data:* ${payload.data}\n` +
+        `*Horário:* ${payload.horario}\n` +
+        `*WhatsApp:* wa.me/55${payload.telefone.replace(/\D/g,'')}`
+    );
+	const linkWhats = `https://wa.me/${APP_CONFIG.telBarbeiro}?text=${mensagem}`;
     const overlay = document.getElementById("mainOverlay");
     overlay.innerHTML = `
         <div class="popup" style="text-align:center">
             <h2 style="color:var(--gold)">✔ Agendado!</h2>
             <p style="margin:15px 0">Estamos processando seu pedido...</p>
-            <button class="btn-confirmar" onclick="location.reload()">OK</button>
+            <button class="btn-confirmar" onclick="window.open('${linkWhats}', '_blank'); location.reload();">OK</button>
         </div>
     `;
 
@@ -217,20 +225,7 @@ async function saveBooking() {
         mode: 'no-cors', 
         body: JSON.stringify(payload) 
     }).then(() => {
-	const mensagem = encodeURIComponent(
-            `*Novo Agendamento!* ✂️\n\n` +
-            `*Cliente:* ${payload.nome}\n` +
-            `*Serviço:* ${payload.servico}\n` +
-            `*Data:* ${payload.data}\n` +
-            `*Horário:* ${payload.horario}\n` +
-            `*WhatsApp:* wa.me/55${payload.telefone.replace(/\D/g,'')}`
-        );
-        
-        // Pequeno delay para o usuário ver o "✔ Agendado!" antes de abrir o Whats
-        setTimeout(() => {
-            window.open(`https://wa.me/${APP_CONFIG.telBarbeiro}?text=${mensagem}`, '_blank');
-            location.reload();
-        }, 1500);
+
         console.log("Salvo no Sheets");
     });
 }
